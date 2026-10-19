@@ -157,7 +157,8 @@ def questionnaire() -> dict:
 def run(args: list[str], *, capture=False, timeout=None, check=True):
     # Never shell=True: host names, file paths and arguments stay separate.
     result = subprocess.run(args, text=True, encoding="utf-8", errors="replace",
-                            capture_output=capture, timeout=timeout)
+                            capture_output=capture, timeout=timeout,
+                            **({"creationflags": subprocess.CREATE_NO_WINDOW} if os.name == "nt" and capture else {}))
     if check and result.returncode:
         # Do not echo the command: future commands may carry private material.
         raise SetupError(f"{Path(args[0]).name} 执行失败（退出码 {result.returncode}）。请查看上方提示后重试。")

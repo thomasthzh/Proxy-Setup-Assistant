@@ -1,8 +1,25 @@
-# VPS-Proxy-SetUP
+# Proxy-Setup-Assistant
 
-一个中文安装向导：填写 VPS 信息，在自己电脑上配置 SSH 密钥和别名，随后在 VPS 部署 **Hysteria 2 + Trojan 备用**，生成带完整分流规则的私人 HTTPS 导入页面。支持 **Clash Verge Rev / Mihomo** 和 **Shadowrocket（小火箭）**。
+一个中文 Windows 桌面向导，帮助检查本地代理环境、准备 Clash Verge Rev、导入和整理配置，也保留独立的 VPS 命令行向导：配置 SSH 密钥和别名，在 VPS 部署 **Hysteria 2 + Trojan 备用**，生成私人 HTTPS 导入页面。支持 **Clash Verge Rev / Mihomo** 和 **Shadowrocket（小火箭）**。
 
-源码不包含任何实际服务器地址、密码、私钥或私人订阅链接。代理凭据在每台服务器上独立随机生成，重复运行保留原凭据。
+源码不包含用户的真实 VPS 地址、密码、私钥或私人订阅链接。代理凭据在每台服务器上独立随机生成，重复运行保留原凭据。
+
+## Windows 桌面版（v0.2.0）
+
+1. 从 [Releases](https://github.com/thomasthzh/Proxy-Setup-Assistant/releases) 下载 `Proxy-Setup-Assistant-0.2.0-windows-x64.zip`，完整解压到本地文件夹。与发布页提供的 `.zip.sha256` 核对 SHA-256。
+2. 双击 `Proxy-Setup-Assistant.exe`。桌面包自带 Python/Tk 运行时，无须安装 Python。保留同目录的 `Proxy-Setup-Console.exe`，VPS 路径会调用它。
+3. 选择适合自己的入口：零基础引导、已有客户端，或已有 VPS；配置可以来自私人 HTTPS 订阅、本地 Clash/Mihomo YAML 文件，或手动选择已有客户端的配置文件。
+4. 先检查和预览，再执行导入、打开安装程序或开始 VPS 部署。客户端安装和卸载都需要明确确认；卸载入口打开 Windows 应用设置，由你选择实际要卸载的程序。
+
+桌面版会根据注册信息和正在运行的进程识别部分已知客户端，不能保证发现所有便携版、自定义安装和未知软件。判断“维护状态”依赖当次官方仓库查询，查询失败会保留未知状态；识别出旧客户端不等于获准卸载。
+
+直接写入客户端配置目前**仅支持 Clash Verge Rev 2.5.8**；HTTPS 自动更新还需已核对的 **Mihomo 1.19.32**。需要先启动一次并完全退出客户端/核心。输入须包含完整 `proxies` 节点；不接受 URI/Base64 列表、嵌套 `proxy-providers`、不支持的协议、插件或高级参数。URL 导入生成固定本地配置，由 Mihomo 原生节点提供器每日更新节点；上游顶层规则与 DNS 不会替换本地模板。文件导入是快照。具体范围、撤销导入与首次规则下载要求见 [桌面使用说明](docs/desktop.md)。
+
+Windows 包目前未签名，可能触发 SmartScreen 或企业策略提示。请核实仓库、发布来源和校验值；无法确认时停止运行，或审阅源码后自行构建。不要关闭系统防护来运行。
+
+向导中的注册地址含仓库所有者提供的**推广邀请码**，推荐人可能获得佣金或奖励。注册、付款和套餐条款需要你在服务商页面自行核实。可达性检查只证明当前网络的一次 HTTPS 访问结果；不代表服务背书或线路测速。**1 元 / 10 GB 之类的小流量套餐不能作为稳定直播保障**。用量取决于总码率与时长，例如平均 4 Mbps、每天 2 小时、30 天约 108 GB，另需预留余量。
+
+下载源比较仅反映本次下载速度，节点延迟检测也不等于吞吐量或直播稳定性。没有任何步骤保证“最快线路”。完整说明、配置隐私、客户端操作和构建步骤见 [桌面使用说明](docs/desktop.md)。
 
 ## 准备条件
 
@@ -28,13 +45,15 @@ NAT VPS 需要商家提供上述端口映射，当前版本要求代理端口内
 
 安装器面向专用新机。发现其他程序占用所需端口、已有非本工具管理的 nginx 或冲突配置时停止，避免覆盖已有网站或代理。现有业务机器请先另行迁移或使用新 VPS。
 
-## Windows 开始使用
+## Windows 使用保留的 VPS 命令行向导
+
+桌面 ZIP 中也可双击 `Proxy-Setup-Console.exe`，或从 PowerShell 传入下面的 CLI 参数；执行结束后窗口保留结果，按 Enter 关闭。`--no-pause` 适合脚本调用。源码方式如下：
 
 安装 [Python 3.10 或更新版本](https://www.python.org/downloads/)，并确认 Windows“可选功能”中已安装 OpenSSH 客户端。打开普通 PowerShell：
 
 ```powershell
-git clone https://github.com/thomasthzh/VPS-Proxy-SetUP.git
-cd VPS-Proxy-SetUP
+git clone https://github.com/thomasthzh/Proxy-Setup-Assistant.git
+cd Proxy-Setup-Assistant
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
@@ -43,8 +62,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 ## macOS / Linux 开始使用
 
 ```bash
-git clone https://github.com/thomasthzh/VPS-Proxy-SetUP.git
-cd VPS-Proxy-SetUP
+git clone https://github.com/thomasthzh/Proxy-Setup-Assistant.git
+cd Proxy-Setup-Assistant
 bash setup.sh
 ```
 
@@ -54,7 +73,7 @@ bash setup.sh
 python -m vps_proxy_setup
 ```
 
-Linux/macOS 通常使用 `python3`。本地向导仅使用 Python 标准库，无须 `pip install`。
+Linux/macOS 通常使用 `python3`。VPS CLI 本身使用 Python 标准库，可直接从源码运行；桌面配置解析需要 PyYAML，源码启动桌面版见 [桌面使用说明](docs/desktop.md)。
 
 ## 向导会做什么
 
@@ -140,6 +159,8 @@ python -m vps_proxy_setup --config examples/setup.example.json --plan
 ```
 
 CI 在 Windows 和 Linux 上运行测试，覆盖参数校验、SSH 配置合并、文件打包边界、服务器预检 / 重跑、分流配置、HTTP 鉴权和规则更新失败回退。部署需要真实公网网络与证书颁发服务；单元测试与配置解析不等同于在所有云厂商完整安装成功。小火箭为闭源客户端，导入后请在自己的 iPhone 上验证实际直播。
+
+v0.2.0 的 Windows 构建流程会检查桌面运行时、CLI 计划和打包后的服务器资源。当前没有以本版本在一台全新公网 VPS 上完成实机部署认证，也没有代表你的网络验证注册、付款或直播结果。测试、打包通过不能替代这些实际检查。
 
 ## 上游与许可
 

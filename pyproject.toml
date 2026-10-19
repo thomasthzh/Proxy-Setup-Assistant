@@ -3,17 +3,30 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "vps-proxy-setup"
-version = "0.1.0"
-description = "Guided SSH setup and a private HTTPS Hysteria 2 / Trojan import page"
+name = "proxy-setup-assistant"
+version = "0.2.0"
+description = "Proxy Setup Assistant: Windows desktop wizard and retained SSH VPS setup CLI"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "thomasthzh"}]
-dependencies = []
+dependencies = ["PyYAML>=6.0.3,<7"]
+
+[project.optional-dependencies]
+desktop-build = [
+    "PyInstaller==6.22.3",
+    "pyinstaller-hooks-contrib==2026.8",
+    "setuptools==84.0.0",
+    "PyYAML==6.0.3",
+]
 
 [project.scripts]
 vps-proxy-setup = "vps_proxy_setup.cli:main"
+proxy-setup-console = "vps_proxy_setup.desktop.console:main"
+
+[project.gui-scripts]
+vps-proxy-desktop = "vps_proxy_setup.desktop.app:main"
+proxy-setup-assistant = "vps_proxy_setup.desktop.app:main"
 
 [tool.setuptools.packages.find]
 include = ["vps_proxy_setup*"]

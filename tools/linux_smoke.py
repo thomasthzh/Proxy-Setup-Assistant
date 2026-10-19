@@ -106,6 +106,10 @@ def main():
         mihomo.write_bytes(gzip.decompress(installer.download(MIHOMO_URL, sha256=MIHOMO_SHA256)))
         mihomo.chmod(0o700)
         print("Pinned upstream binary hashes verified.", flush=True)
+        # Validate desktop output with the same real pinned core as transport tests.
+        subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests",
+                        "-p", "test_desktop_profiles.py", "-v"], check=True, timeout=180,
+                       env={**os.environ, "MIHOMO_BINARY": str(mihomo)})
 
         certificate, key = root / "test-ca.pem", root / "test-key.pem"
         command(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
