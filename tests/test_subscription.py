@@ -252,7 +252,9 @@ class HTTPTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # Match the server's canonical path even when a Windows runner's TEMP
+        # uses a short name or junction to another directory.
+        self.root = Path(self.temp.name).resolve(strict=True)
         self.settings = settings()
         self.token = self.settings["token"]
         release = self.root / "releases" / "test-release"

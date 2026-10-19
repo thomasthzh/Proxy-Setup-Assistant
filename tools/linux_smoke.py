@@ -70,6 +70,21 @@ def spawn(stack, args, log_path, **kwargs):
     return process
 
 
+def diagnostics(root, settings):
+    """Only temporary test logs; scrub every generated credential before output."""
+    hidden = [settings["token"], settings["hy2_obfs"]]
+    for client in settings["clients"].values():
+        hidden.extend(client.values())
+        hidden.append(client["hy2_auth"].split(":", 1)[1])
+    for name in ("hy.log", "xray.log", "client.log"):
+        path = root / name
+        if path.exists():
+            content = path.read_text(encoding="utf-8", errors="replace")[-12000:]
+            for value in hidden:
+                content = content.replace(value, "[REDACTED]")
+            print(name + " (temporary, redacted):\n" + content, flush=True)
+
+
 def main():
     if sys.platform != "linux" or installer.architecture() != "amd64":
         raise SystemExit("This smoke check requires Linux amd64.")
@@ -147,9 +162,13 @@ def main():
                        headers={"Authorization": "Bearer " + cfg["secret"], "Content-Type": "application/json"})
             with direct.open(request, timeout=5) as response:
                 assert response.status == 204
-            with proxied.open("https://example.com/", timeout=30) as response:
-                if response.status != 200 or b"Example Domain" not in response.read(100_000):
-                    raise RuntimeError("Proxy egress did not return expected content")
+            try:
+                with proxied.open("https://example.com/", timeout=30) as response:
+                    if response.status != 200 or b"Example Domain" not in response.read(100_000):
+                        raise RuntimeError("Proxy egress did not return expected content")
+            except Exception:
+                diagnostics(root, settings)
+                raise
             print(node["type"] + ": generated config, CA-verified handshake and HTTPS egress passed.", flush=True)
         print("Real transport smoke check passed; temporary processes and credentials cleaned up.", flush=True)
 
