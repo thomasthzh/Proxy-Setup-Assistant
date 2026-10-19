@@ -169,6 +169,39 @@ $body = $text.Substring($text.IndexOf('#<POWERSHELL>'+[Environment]::NewLine) + 
         self.assertIn(b"damaged or changed", result.stdout)
         self.assertFalse(self.marker.exists())
 
+    def test_short_windows_localappdata_supports_first_launch_cache_and_rejects_extra_directory(self):
+        # Windows CI exposes TEMP through RUNNER~1. GetFullPath can expand such
+        # aliases while EnumerateFileSystemEntries preserves the supplied form.
+        import ctypes
+        from ctypes import wintypes
+        get_short_path = ctypes.WinDLL("kernel32", use_last_error=True).GetShortPathNameW
+        get_short_path.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD)
+        get_short_path.restype = wintypes.DWORD
+        buffer = ctypes.create_unicode_buffer(32768)
+        result = get_short_path(str(self.local), buffer, len(buffer))
+        if not result:
+            raise ctypes.WinError(ctypes.get_last_error())
+        if result >= len(buffer):
+            self.fail("Unexpectedly long Windows short path")
+        if buffer.value.casefold() == str(self.local).casefold():
+            self.skipTest("8.3 short names are disabled on this Windows volume")
+        self.env["LOCALAPPDATA"] = buffer.value
+        self.functions("""
+function Receive-Release([string] $Url, [string] $Destination, [long] $ExpectedBytes) {
+    [IO.File]::Copy($env:PSA_TEST_ARCHIVE, $Destination)
+}
+Invoke-Launcher
+""")
+        result = self.run_bat("--self-test")
+        self.assertEqual(result.returncode, 0, repr(result.stdout) + repr(result.stderr))
+        self.assertEqual(self.marker.read_text(), "--self-test")
+        (self.cache / "docs" / "unexpected").mkdir()
+        self.marker.unlink()
+        result = self.run_bat("--self-test")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"unexpected directory", result.stdout)
+        self.assertFalse(self.marker.exists())
+
     def test_cache_rejects_extra_files_missing_files_and_reparse_points(self):
         self.seed_cache()
         (self.cache / "injected.dll").write_bytes(b"not part of release")

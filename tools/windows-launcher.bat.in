@@ -63,20 +63,24 @@ function Get-AllowedDirectories($Manifest) {
 function Assert-Cache([string] $Path, $Manifest) {
     Assert-OrdinaryPath $Path
     if (-not [IO.Directory]::Exists($Path)) { throw 'The application cache is missing.' }
-    $prefix = [IO.Path]::GetFullPath($Path).TrimEnd('\') + '\'
     $directories = Get-AllowedDirectories $Manifest
     $found = 0
     # Walk one directory at a time: reject reparse points before ever descending into them.
-    $pending = New-Object 'Collections.Generic.Queue[string]'
-    $pending.Enqueue($Path)
+    # Keep a logical relative path alongside each physical path. GetFullPath may
+    # expand Windows 8.3 aliases while directory enumeration preserves them, so
+    # subtracting an absolute-prefix length can corrupt even a valid child name.
+    $pending = New-Object 'Collections.Generic.Queue[object]'
+    $pending.Enqueue(@{ Path = $Path; Relative = '' })
     while ($pending.Count) {
-        foreach ($entry in [IO.Directory]::EnumerateFileSystemEntries($pending.Dequeue())) {
+        $current = $pending.Dequeue()
+        foreach ($entry in [IO.Directory]::EnumerateFileSystemEntries($current.Path)) {
             $attributes = [IO.File]::GetAttributes($entry)
             if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'The cache contains a link or junction.' }
-            $relative = $entry.Substring($prefix.Length).Replace('\', '/')
+            $relative = [IO.Path]::GetFileName($entry)
+            if ($current.Relative) { $relative = $current.Relative + '/' + $relative }
             if (($attributes -band [IO.FileAttributes]::Directory) -ne 0) {
                 if (-not $directories.ContainsKey($relative)) { throw 'The cache contains an unexpected directory.' }
-                $pending.Enqueue($entry)
+                $pending.Enqueue(@{ Path = $entry; Relative = $relative })
             } else {
                 if (-not $Manifest.ContainsKey($relative)) { throw 'The cache contains an unexpected file.' }
                 Assert-FileHash $entry $Manifest[$relative]
