@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 import gzip
+import http.client
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import io
 import json
 import os
@@ -17,6 +19,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.request
 import zipfile
@@ -156,6 +159,17 @@ def main():
         direct = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         proxied = urllib.request.build_opener(urllib.request.ProxyHandler({"http": f"http://127.0.0.1:{mixed}",
                                                                         "https": f"http://127.0.0.1:{mixed}"}))
+        class PrivateTarget(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"PRIVATE_TARGET_REACHED")
+            def log_message(self, *args):
+                pass
+        private_target = ThreadingHTTPServer(("127.0.0.1", 0), PrivateTarget)
+        stack.callback(private_target.server_close)
+        stack.callback(private_target.shutdown)
+        threading.Thread(target=private_target.serve_forever, daemon=True).start()
         for node in cfg["proxies"]:
             request = urllib.request.Request(f"http://127.0.0.1:{control}/proxies/PROXY",
                        data=json.dumps({"name": node["name"]}).encode(), method="PUT",
@@ -169,7 +183,19 @@ def main():
             except Exception:
                 diagnostics(root, settings)
                 raise
+            # Send an explicit HTTP-proxy request (do not let NO_PROXY bypass it).
+            connection = http.client.HTTPConnection("127.0.0.1", mixed, timeout=10)
+            try:
+                connection.request("GET", f"http://127.0.0.1:{private_target.server_port}/")
+                response = connection.getresponse()
+                if b"PRIVATE_TARGET_REACHED" in response.read(100_000):
+                    raise RuntimeError("Private-address egress guard failed")
+            except (http.client.RemoteDisconnected, ConnectionResetError):
+                pass  # Rejecting the request by closing it is also valid.
+            finally:
+                connection.close()
             print(node["type"] + ": generated config, CA-verified handshake and HTTPS egress passed.", flush=True)
+            print(node["type"] + ": private-address egress correctly denied.", flush=True)
         print("Real transport smoke check passed; temporary processes and credentials cleaned up.", flush=True)
 
 

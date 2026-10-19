@@ -45,11 +45,13 @@ USERS = ('vpsproxy-hy2', 'vpsproxy-xray', 'vpsproxy-web', 'vpsproxy-sub')
 SERVICE_NAMES = ('vpsproxy-nginx', 'vpsproxy-hy2', 'vpsproxy-xray', 'vpsproxy-sub',
                  'vpsproxy-refresh', 'vpsproxy-renew')
 # Prevent authenticated clients from reaching host services, private networks,
-# link-local cloud metadata endpoints, multicast, and address-translation ranges.
+# link-local cloud metadata endpoints, multicast, and NAT64 translation ranges.
+# Do not block ::ffff:0:0/96: Go also represents ordinary public IPv4 in that
+# mapped range. The IPv4 rules below already cover mapped private destinations.
 PRIVATE_CIDRS = ('0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8',
                  '169.254.0.0/16', '172.16.0.0/12', '192.0.0.0/24',
                  '192.168.0.0/16', '198.18.0.0/15', '224.0.0.0/4', '240.0.0.0/4',
-                 '::/128', '::1/128', '::ffff:0:0/96', '64:ff9b::/96',
+                 '::/128', '::1/128', '64:ff9b::/96',
                  '64:ff9b:1::/48', 'fc00::/7', 'fe80::/10', 'ff00::/8')
 
 
@@ -482,9 +484,7 @@ def transport_configs(settings: dict, server_ips: list[str] | None = None) -> di
                                                 'oneTimeLoading': False, 'usage': 'encipherment'}]}}}],
             'dns': {'servers': ['localhost']},
             'routing': {'domainStrategy': 'IPIfNonMatch', 'rules': [
-                # Xray unmaps IPv4-mapped IPv6 before its CIDR parser, and
-                # rejects a /96 there; ordinary IPv4 rules cover those targets.
-                {'type': 'field', 'ip': [network for network in blocked if network != '::ffff:0:0/96'], 'outboundTag': 'blocked'},
+                {'type': 'field', 'ip': blocked, 'outboundTag': 'blocked'},
                 {'type': 'field', 'domain': ['full:' + settings['address']], 'outboundTag': 'blocked'}]},
             'outbounds': [{'protocol': 'freedom', 'tag': 'direct',
                            'settings': {'domainStrategy': 'UseIPv4v6'},

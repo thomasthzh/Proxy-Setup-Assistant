@@ -3,6 +3,7 @@ import contextlib
 import copy
 import hashlib
 import io
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -27,6 +28,17 @@ def completed(args=(), code=0, stdout=''):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_private_ranges_do_not_block_public_ipv4_mapped_addresses(self):
+        # Go's IP matchers may represent normal IPv4 as ::ffff:a.b.c.d.
+        # A /96 block here would deny every public IPv4 destination.
+        mapped = ipaddress.ip_address("::ffff:1.1.1.1")
+        for value in inst.PRIVATE_CIDRS:
+            network = ipaddress.ip_network(value)
+            if network.version == 6:
+                self.assertNotIn(mapped, network)
+        self.assertIn("127.0.0.0/8", inst.PRIVATE_CIDRS)
+        self.assertIn("169.254.0.0/16", inst.PRIVATE_CIDRS)
+
     def test_valid_normalized_configuration(self):
         cfg = configuration()
         cfg['address'] = cfg['tls_name'] = 'Proxy.Example.NET'
