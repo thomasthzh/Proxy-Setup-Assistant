@@ -1,0 +1,33 @@
+{
+  "verified_on": "2026-10-19",
+  "hysteria": {
+    "version": "2.12.3",
+    "release": "https://github.com/HyNetworks/hysteria/releases/tag/app/v2.12.3",
+    "checksum_source": "https://api.github.com/repos/HyNetworks/hysteria/releases/tags/app%2Fv2.12.3",
+    "amd64": {
+      "url": "https://github.com/HyNetworks/hysteria/releases/download/app/v2.12.3/hysteria-linux-amd64",
+      "sha256": "8c7a68a906998b747a0db87586e364f995fbfddb95693ae6e2fdb68a6e920d3e"
+    },
+    "arm64": {
+      "url": "https://github.com/HyNetworks/hysteria/releases/download/app/v2.12.3/hysteria-linux-arm64",
+      "sha256": "c8dc653c3ba0a28d29a26b8fa52d2086f27c0927afddce95c09965e7174e78b0"
+    }
+  },
+  "xray": {
+    "version": "26.3.27",
+    "release": "https://github.com/XTLS/Xray-core/releases/tag/v26.3.27",
+    "checksum_source": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip.dgst",
+    "amd64": {
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip",
+      "sha256": "23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae"
+    },
+    "arm64": {
+      "url": "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-arm64-v8a.zip",
+      "sha256": "4d30283ae614e3057f730f67cd088a42be6fdf91f8639d82cb69e48cde80413c"
+    }
+  },
+  "certbot": {
+    "version": "5.8.0",
+    "source": "https://pypi.org/project/certbot/5.8.0/"
+  }
+}

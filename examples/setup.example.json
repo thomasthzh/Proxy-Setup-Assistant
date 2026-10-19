@@ -1,0 +1,24 @@
+{
+  "ssh": {
+    "host": "203.0.113.10",
+    "port": 22,
+    "user": "root",
+    "alias": "MyVPS",
+    "identity_file": ""
+  },
+  "server": {
+    "schema_version": 1,
+    "label": "MyVPS",
+    "address": "vps.example.com",
+    "tls_name": "vps.example.com",
+    "email": "",
+    "acme_accept_terms": true,
+    "ports": {
+      "https": 8443,
+      "hy2": 8443,
+      "trojan": 9443
+    },
+    "tailscale": false,
+    "tune": true
+  }
+}
