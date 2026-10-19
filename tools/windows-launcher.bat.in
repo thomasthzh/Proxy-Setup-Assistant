@@ -1,0 +1,284 @@
+@echo off
+setlocal DisableDelayedExpansion
+set "PSA_LAUNCHER_FILE=%~f0"
+set "PSA_LAUNCHER_MODE=%~1"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; try { $text=[IO.File]::ReadAllText($env:PSA_LAUNCHER_FILE,[Text.Encoding]::UTF8); $mark='#<POWERSHELL>'; $start=$text.IndexOf($mark+[Environment]::NewLine); if($start -lt 0){throw 'Launcher is incomplete. Download it again from the official release.'}; & ([ScriptBlock]::Create($text.Substring($start+$mark.Length))); } catch { Write-Host ('ERROR: '+$_.Exception.Message) -ForegroundColor Red; exit 1 }"
+set "PSA_EXIT=%ERRORLEVEL%"
+if "%PSA_LAUNCHER_MODE%"=="" if not "%PSA_EXIT%"=="0" pause
+exit /b %PSA_EXIT%
+#<POWERSHELL>
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
+$Version = '@@VERSION@@'
+$ReleaseUrl = 'https://github.com/thomasthzh/Proxy-Setup-Assistant/releases/tag/v@@VERSION@@'
+$ArchiveUrl = 'https://github.com/thomasthzh/Proxy-Setup-Assistant/releases/download/v@@VERSION@@/Proxy-Setup-Assistant-@@VERSION@@-windows-x64.zip'
+$ArchiveHash = '@@ZIP_SHA256@@'
+$ArchiveBytes = @@ZIP_BYTES@@
+$ExpectedFiles = @{
+@@FILE_MANIFEST@@
+}
+
+function Assert-OrdinaryPath([string] $Path) {
+    $current = [IO.Path]::GetFullPath($Path)
+    while ($current) {
+        if ([IO.File]::Exists($current) -or [IO.Directory]::Exists($current)) {
+            $attributes = [IO.File]::GetAttributes($current)
+            if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw 'A cache path is a symbolic link or junction. No program was started.'
+            }
+        }
+        $parent = [IO.Directory]::GetParent($current)
+        if ($null -eq $parent) { break }
+        $current = $parent.FullName
+    }
+}
+
+function Get-StreamHash($Stream) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($Stream))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+}
+
+function Assert-FileHash([string] $Path, [string] $Expected) {
+    Assert-OrdinaryPath $Path
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        if ((Get-StreamHash $stream) -cne $Expected) { throw 'SHA-256 verification failed. No unverified program was started.' }
+    } finally { $stream.Dispose() }
+}
+
+function Get-AllowedDirectories($Manifest) {
+    $directories = @{}
+    foreach ($name in $Manifest.Keys) {
+        $parent = [IO.Path]::GetDirectoryName($name.Replace('/', '\'))
+        while ($parent) {
+            $directories[$parent.Replace('\', '/')] = $true
+            $parent = [IO.Path]::GetDirectoryName($parent)
+        }
+    }
+    return $directories
+}
+
+function Assert-Cache([string] $Path, $Manifest) {
+    Assert-OrdinaryPath $Path
+    if (-not [IO.Directory]::Exists($Path)) { throw 'The application cache is missing.' }
+    $prefix = [IO.Path]::GetFullPath($Path).TrimEnd('\') + '\'
+    $directories = Get-AllowedDirectories $Manifest
+    $found = 0
+    # Walk one directory at a time: reject reparse points before ever descending into them.
+    $pending = New-Object 'Collections.Generic.Queue[string]'
+    $pending.Enqueue($Path)
+    while ($pending.Count) {
+        foreach ($entry in [IO.Directory]::EnumerateFileSystemEntries($pending.Dequeue())) {
+            $attributes = [IO.File]::GetAttributes($entry)
+            if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'The cache contains a link or junction.' }
+            $relative = $entry.Substring($prefix.Length).Replace('\', '/')
+            if (($attributes -band [IO.FileAttributes]::Directory) -ne 0) {
+                if (-not $directories.ContainsKey($relative)) { throw 'The cache contains an unexpected directory.' }
+                $pending.Enqueue($entry)
+            } else {
+                if (-not $Manifest.ContainsKey($relative)) { throw 'The cache contains an unexpected file.' }
+                Assert-FileHash $entry $Manifest[$relative]
+                $found++
+            }
+        }
+    }
+    if ($found -ne $Manifest.Count) { throw 'The application cache is incomplete.' }
+}
+
+function Assert-ZipName([string] $Name, [long] $Attributes) {
+    if (-not $Name -or $Name.Contains('\') -or $Name.StartsWith('/')) { throw 'Unsafe path in release ZIP.' }
+    $normal = $Name.TrimEnd('/')
+    foreach ($part in $normal.Split('/')) {
+        if (-not $part -or $part -eq '.' -or $part -eq '..' -or $part -match '[<>:"|?*\x00-\x1f]' -or
+            $part.EndsWith('.') -or $part.EndsWith(' ') -or $part -match '^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(\.|$)') {
+            throw 'Unsafe path in release ZIP.'
+        }
+    }
+    $type = ($Attributes -shr 16) -band 61440
+    if (($type -ne 0 -and $type -ne 32768 -and $type -ne 16384) -or ($Attributes -band 1024)) {
+        throw 'Links and reparse points are forbidden in release ZIPs.'
+    }
+    return $normal
+}
+
+function Expand-VerifiedArchive([string] $Archive, [string] $Destination, $Manifest) {
+    Assert-OrdinaryPath $Archive
+    Assert-OrdinaryPath $Destination
+    if ([IO.Directory]::Exists($Destination)) { throw 'Extraction destination must be new.' }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
+    try {
+        if ($zip.Entries.Count -gt 512) { throw 'Release ZIP has too many entries.' }
+        $directories = Get-AllowedDirectories $Manifest
+        $seen = @{}
+        $total = [long] 0
+        foreach ($entry in $zip.Entries) {
+            $name = Assert-ZipName $entry.FullName $entry.ExternalAttributes
+            if ($seen.ContainsKey($name)) { throw 'Duplicate release ZIP entry.' }
+            $seen[$name] = $true
+            if ($entry.FullName.EndsWith('/')) {
+                if (-not $directories.ContainsKey($name)) { throw 'Unexpected directory in release ZIP.' }
+            } elseif (-not $Manifest.ContainsKey($name)) { throw 'Unexpected file in release ZIP.' }
+            $total += $entry.Length
+            if ($total -gt 314572800) { throw 'Release ZIP exceeds the extraction limit.' }
+        }
+        [void] [IO.Directory]::CreateDirectory($Destination)
+        foreach ($entry in $zip.Entries) {
+            if ($entry.FullName.EndsWith('/')) { continue }
+            $target = [IO.Path]::Combine($Destination, $entry.FullName.Replace('/', '\'))
+            [void] [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target))
+            Assert-OrdinaryPath $target
+            $inputStream = $entry.Open()
+            $outputStream = $null
+            try {
+                $outputStream = [IO.File]::Open($target, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                $inputStream.CopyTo($outputStream)
+            } finally {
+                if ($null -ne $outputStream) { $outputStream.Dispose() }
+                $inputStream.Dispose()
+            }
+        }
+    } finally { $zip.Dispose() }
+    Assert-Cache $Destination $Manifest
+}
+
+function Receive-Release([string] $Url, [string] $Destination, [long] $ExpectedBytes) {
+    # Only release assets from GitHub's own HTTPS hosts may be followed.
+    $allowedHosts = @('github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com', 'github-releases.githubusercontent.com')
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $uri = [Uri] $Url
+    for ($redirect = 0; $redirect -le 5; $redirect++) {
+        if ($uri.Scheme -ne 'https' -or $uri.Port -ne 443 -or $uri.UserInfo -or $allowedHosts -notcontains $uri.DnsSafeHost) {
+            throw 'The release download redirected outside the allowed HTTPS hosts.'
+        }
+        $request = [Net.HttpWebRequest]::Create($uri)
+        $request.AllowAutoRedirect = $false
+        $request.Timeout = 30000
+        $request.ReadWriteTimeout = 30000
+        $request.UserAgent = 'Proxy-Setup-Assistant-Launcher'
+        $response = $request.GetResponse()
+        try {
+            $status = [int] $response.StatusCode
+            if ($status -ge 300 -and $status -lt 400) {
+                $uri = New-Object Uri($uri, $response.Headers['Location'])
+                continue
+            }
+            if ($status -ne 200) { throw 'The official release server did not return the requested file.' }
+            if ($response.ContentLength -gt $ExpectedBytes) { throw 'The download exceeds the pinned release size.' }
+            $inputStream = $response.GetResponseStream()
+            $outputStream = $null
+            try {
+                $outputStream = [IO.File]::Open($Destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+                $buffer = New-Object byte[] 65536
+                $received = [long] 0
+                $timer = [Diagnostics.Stopwatch]::StartNew()
+                while (($read = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    $received += $read
+                    if ($received -gt $ExpectedBytes -or $timer.Elapsed.TotalMinutes -gt 10) { throw 'Release download exceeded its size or time limit.' }
+                    $outputStream.Write($buffer, 0, $read)
+                    Write-Progress -Activity '首次启动：正在下载并准备代理配置助手' -Status "$received / $ExpectedBytes bytes" -PercentComplete ([int] (100 * $received / $ExpectedBytes))
+                }
+                if ($received -ne $ExpectedBytes) { throw 'The release download is incomplete.' }
+                Write-Progress -Activity '首次启动：正在下载并准备代理配置助手' -Completed
+                return
+            } finally {
+                if ($null -ne $outputStream) { $outputStream.Dispose() }
+                $inputStream.Dispose()
+            }
+        } finally { $response.Dispose() }
+    }
+    throw 'Too many redirects while downloading the official release.'
+}
+
+function Enter-CacheLock([string] $Path) {
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        Assert-OrdinaryPath $Path
+        try { return [IO.File]::Open($Path, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None) }
+        catch [IO.IOException] {
+            if ($timer.Elapsed.TotalSeconds -ge 30) { throw 'Another launcher is busy. Wait for its download to finish, then try again.' }
+            Start-Sleep -Milliseconds 250
+        }
+    } while ($true)
+}
+
+function Start-VerifiedApplication([string] $Cache, [string] $Mode, $Manifest) {
+    $handles = New-Object 'Collections.Generic.List[IDisposable]'
+    try {
+        foreach ($name in @('Proxy-Setup-Assistant.exe', 'Proxy-Setup-Console.exe')) {
+            $path = [IO.Path]::Combine($Cache, $name)
+            Assert-OrdinaryPath $path
+            $handle = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+            $handles.Add($handle)
+            if ((Get-StreamHash $handle) -cne $Manifest[$name]) { throw 'Executable verification failed immediately before launch.' }
+        }
+        $startInfo = New-Object Diagnostics.ProcessStartInfo
+        $startInfo.FileName = [IO.Path]::Combine($Cache, 'Proxy-Setup-Assistant.exe')
+        $startInfo.WorkingDirectory = $Cache
+        $startInfo.UseShellExecute = $false
+        if ($Mode -eq '--self-test') { $startInfo.Arguments = '--self-test' }
+        $process = [Diagnostics.Process]::Start($startInfo)
+        if ($Mode -eq '--self-test') {
+            if (-not $process.WaitForExit(120000)) { $process.Kill(); throw 'Application self-test timed out.' }
+            if ($process.ExitCode -ne 0) { throw 'Application self-test failed.' }
+        }
+        $process.Dispose()
+    } finally { foreach ($handle in $handles) { $handle.Dispose() } }
+}
+
+function Invoke-Launcher {
+    $mode = $env:PSA_LAUNCHER_MODE
+    if ($mode -and $mode -notin @('--verify-only', '--self-test')) { throw 'Supported options: --verify-only or --self-test.' }
+    if (-not [Environment]::Is64BitOperatingSystem -or $env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') {
+        throw 'This release requires Windows x64.'
+    }
+    if (-not $env:LOCALAPPDATA -or -not [IO.Path]::IsPathRooted($env:LOCALAPPDATA)) { throw 'Windows LOCALAPPDATA is unavailable.' }
+    $base = [IO.Path]::Combine($env:LOCALAPPDATA, 'Proxy-Setup-Assistant', 'launcher')
+    Assert-OrdinaryPath $base
+    [void] [IO.Directory]::CreateDirectory($base)
+    $lock = Enter-CacheLock ([IO.Path]::Combine($base, 'launcher.lock'))
+    $stage = $null
+    try {
+        $cache = [IO.Path]::Combine($base, $Version)
+        Assert-OrdinaryPath $cache
+        if ([IO.Directory]::Exists($cache)) {
+            try { Assert-Cache $cache $ExpectedFiles }
+            catch { throw ('The existing cache is damaged or changed. No program was started. Close the app, remove this version folder, then retry: ' + $cache + '. ' + $_.Exception.Message) }
+        } else {
+            Write-Host '首次启动：自动下载、校验并准备程序。无需手动解压，无需安装 Python，也不需要管理员权限。'
+            Write-Host ('本次下载约 ' + [Math]::Round($ArchiveBytes / 1MB, 1) + ' MB；以后双击会直接使用已校验的本地程序。')
+            $stage = [IO.Path]::Combine($base, 'staging-' + [Guid]::NewGuid().ToString('N'))
+            Assert-OrdinaryPath $stage
+            [void] [IO.Directory]::CreateDirectory($stage)
+            $archive = [IO.Path]::Combine($stage, 'release.zip')
+            Receive-Release $ArchiveUrl $archive $ArchiveBytes
+            Assert-FileHash $archive $ArchiveHash
+            $payload = [IO.Path]::Combine($stage, 'application')
+            Expand-VerifiedArchive $archive $payload $ExpectedFiles
+            Assert-OrdinaryPath $cache
+            [IO.Directory]::Move($payload, $cache)
+        }
+        if ($mode -eq '--verify-only') { Write-Host ('校验完成：Proxy Setup Assistant ' + $Version); return }
+        Write-Host '正在启动代理配置助手…'
+        Start-VerifiedApplication $cache $mode $ExpectedFiles
+    } finally {
+        if ($null -ne $stage -and [IO.Directory]::Exists($stage)) {
+            # This is a freshly generated child of our cache root, never a user-supplied path.
+            Assert-OrdinaryPath $stage
+            [IO.Directory]::Delete($stage, $true)
+        }
+        $lock.Dispose()
+    }
+}
+
+# LAUNCHER_ENTRY_POINT
+try { Invoke-Launcher; exit 0 }
+catch {
+    Write-Host ''
+    Write-Host ('启动失败：' + $_.Exception.Message) -ForegroundColor Red
+    Write-Host ('官方发布页（可重新下载或查看说明）：' + $ReleaseUrl)
+    Write-Host '启动器没有修改你的 SSH、代理配置或系统安装设置。'
+    exit 1
+}

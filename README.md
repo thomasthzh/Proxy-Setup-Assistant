@@ -4,10 +4,12 @@
 
 源码不包含用户的真实 VPS 地址、密码、私钥或私人订阅链接。代理凭据在每台服务器上独立随机生成，重复运行保留原凭据。
 
-## Windows 桌面版（v0.2.0）
+## Windows：下载一个 BAT，双击开始（v0.2.1）
 
-1. 从 [Releases](https://github.com/thomasthzh/Proxy-Setup-Assistant/releases) 下载 `Proxy-Setup-Assistant-0.2.0-windows-x64.zip`，完整解压到本地文件夹。与发布页提供的 `.zip.sha256` 核对 SHA-256。
-2. 双击 `Proxy-Setup-Assistant.exe`。桌面包自带 Python/Tk 运行时，无须安装 Python。保留同目录的 `Proxy-Setup-Console.exe`，VPS 路径会调用它。
+**[下载 Proxy-Setup-Assistant.bat](https://github.com/thomasthzh/Proxy-Setup-Assistant/releases/download/v0.2.1/Proxy-Setup-Assistant.bat)**
+
+1. 保存这个 BAT 文件，双击运行。无需自行下载 ZIP、解压或安装 Python。
+2. 首次启动自动从官方 GitHub Release 下载本版本程序包、核对 SHA-256 并准备到本机缓存，随后打开中文向导；以后双击同一 BAT 直接使用已核验的缓存。BAT 本身很小，首次仍需联网下载约 24 MB 的运行程序。
 3. 选择适合自己的入口：零基础引导、已有客户端，或已有 VPS；配置可以来自私人 HTTPS 订阅、本地 Clash/Mihomo YAML 文件，或手动选择已有客户端的配置文件。
 4. 先检查和预览，再执行导入、打开安装程序或开始 VPS 部署。客户端安装和卸载都需要明确确认；卸载入口打开 Windows 应用设置，由你选择实际要卸载的程序。
 
@@ -17,7 +19,11 @@
 
 Windows 包目前未签名，可能触发 SmartScreen 或企业策略提示。请核实仓库、发布来源和校验值；无法确认时停止运行，或审阅源码后自行构建。不要关闭系统防护来运行。
 
-向导中的注册地址含仓库所有者提供的**推广邀请码**，推荐人可能获得佣金或奖励。注册、付款和套餐条款需要你在服务商页面自行核实。可达性检查只证明当前网络的一次 HTTPS 访问结果；不代表服务背书或线路测速。**1 元 / 10 GB 之类的小流量套餐不能作为稳定直播保障**。用量取决于总码率与时长，例如平均 4 Mbps、每天 2 小时、30 天约 108 GB，另需预留余量。
+向导中的注册地址含仓库所有者提供的**推广邀请码**，推荐人可能获得佣金或奖励。注册、付款和套餐条款需要你在服务商页面自行核实。可达性检查只证明当前网络的一次 HTTPS 访问结果；不代表服务背书或线路测速。
+
+**流量优先看真实账单。** 不把在线时间当作持续传输时间，也不默认让普通用户按视频码率购买大套餐。没有历史记录时，先选可追加的小套餐，用 7 天看看实际消耗；已有记录可输入累计 GB、统计时段和人数，换算全组及人均月用量。持续开播、视频观看或大文件传输另有高级计算，按实际经过代理的传输量估算。
+
+需要离线搬运时，仍可在 [v0.2.1 Release](https://github.com/thomasthzh/Proxy-Setup-Assistant/releases/tag/v0.2.1) 下载 Windows x64 ZIP，核对校验值后完整解压，双击其中的 `Proxy-Setup-Assistant.exe`。BAT 固定到对应版本，不会静默改用未来版本；升级时下载新版本 BAT。缓存不包含需要提前填写的 VPS 密码或订阅链接。
 
 下载源比较仅反映本次下载速度，节点延迟检测也不等于吞吐量或直播稳定性。没有任何步骤保证“最快线路”。完整说明、配置隐私、客户端操作和构建步骤见 [桌面使用说明](docs/desktop.md)。
 

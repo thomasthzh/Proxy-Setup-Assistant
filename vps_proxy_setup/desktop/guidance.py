@@ -59,6 +59,32 @@ def check_referrals(timeout: float = 6) -> tuple[LinkCheck, ...]:
     return tuple(sorted(results, key=lambda result: (not result.reachable, result.seconds or float("inf"))))
 
 
+@dataclass(frozen=True)
+class ObservedUsage:
+    group_gb: float
+    per_person_gb: float
+
+
+def observed_monthly_traffic(total_gb: float, period: float, people: int = 1,
+                             *, unit: str = "days") -> ObservedUsage:
+    """Average observed billed traffic; days use 30-day months, without padding."""
+    message = "请输入有效统计：总流量 0–10 亿 GB、1–3660 天或 1–120 个月、1–10000 位整数人数。"
+    try:
+        if any(isinstance(value, bool) for value in (total_gb, period, people)):
+            raise ValueError
+        total, duration, count = float(total_gb), float(period), float(people)
+        if (not all(math.isfinite(value) for value in (total, duration, count))
+                or not 0 <= total <= 1_000_000_000
+                or not 1 <= count <= 10_000 or not count.is_integer()
+                or unit not in ("days", "months")
+                or not 1 <= duration <= (3660 if unit == "days" else 120)):
+            raise ValueError
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise SetupError(message) from exc
+    group = total / duration * (30 if unit == "days" else 1)
+    return ObservedUsage(group_gb=group, per_person_gb=group / count)
+
+
 def monthly_traffic(mbps: float, hours: float, days: int = 30, reserve: float = 1.2) -> float:
     """Decimal GB, averaged aggregate upload+download bitrate, with headroom."""
     values = (float(mbps), float(hours), float(days), float(reserve))

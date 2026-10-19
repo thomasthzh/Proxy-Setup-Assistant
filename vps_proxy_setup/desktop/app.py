@@ -411,28 +411,65 @@ class Wizard:
             self.work("正在核对备份并撤销本次导入…", lambda: profiles.rollback_import(self.last_backup, consent=True), done)
 
     def show_referrals(self):
-        self.heading("先估算，再选择", "你可以使用任何服务商或返回部署自己的 VPS。下方是仓库作者提供的推广链接，含推荐码；可达不代表对服务质量、地区可用性或套餐的背书。")
-        self.paragraph("不能仅凭每天在线时长推算流量。网页待机与持续看直播差别很大，1GB / 10GB 不能作为通用月用量推荐。只计算实际经过代理的上传与下载。")
-        self.bitrate = tk.StringVar(self.root, "3")
-        self.hours = tk.StringVar(self.root, "4")
-        self.paragraph("不知道码率？可先选一个示例场景，再按实际使用调整。以下仅是计算假设，不是套餐用量保证。", muted=True)
-        presets = ttk.Combobox(self.body, state="readonly", values=("网页/聊天 · 示例 0.05 Mbps", "音频 · 示例 0.2 Mbps", "视频观看 · 示例 3 Mbps", "直播上传 · 示例 6 Mbps"))
-        presets.current(2)
-        presets.pack(fill="x", pady=(0, 14))
-        presets.bind("<<ComboboxSelected>>", lambda event: self.bitrate.set(("0.05", "0.2", "3", "6")[presets.current()]))
-        self.field("代理流量的平均合计码率（Mbps；视频可按实际播放码率填写）", self.bitrate)
-        self.field("每天实际传输时长（小时；不要把待机时间算进去）", self.hours)
-        self.estimate = tk.StringVar(self.root, "例如 3 Mbps × 每天 4 小时 × 30 天，加 20% 余量，约 194.4 GB/月。")
-        ttk.Label(self.body, textvariable=self.estimate, wraplength=680).pack(fill="x", pady=(0, 14))
-        self.button("估算月用量", self.estimate_traffic)
+        self.heading("获取一份订阅", "你可以使用任何服务商，也可以返回部署自己的 VPS。")
+        self.paragraph("还没有用量记录？先选支持短期使用的小套餐，正常用 7 天，再看服务商账单里的已用流量。开着代理不等于一直耗流量，不必按每天在线多久买大套餐。")
+        self.paragraph("下方为仓库作者提供的推广入口，含推荐码；可访问不代表服务质量或套餐背书。注册与购买由你在浏览器完成。", muted=True)
         self.button("检测四个推广入口的 HTTPS 可达性", self.probe_referrals, primary=True)
+        self.button("已有用量记录：换算每月用量", lambda: self.navigate("usage_estimate"))
+        self.button("高级：计算持续直播或下载用量", lambda: self.navigate("bitrate_estimate"))
         self.button("我已有订阅，返回导入", lambda: self.navigate("local"))
         self.button("我想自己部署 VPS", lambda: self.navigate("vps"))
 
+    def show_usage_estimate(self):
+        self.heading("用实际记录，选合适套餐", "优先填服务商账单的已用流量；客户端记录需覆盖同一时段及所有参与统计的设备。")
+        self.paragraph("只统计计入这个套餐的流量。国内直连通常不消耗代理套餐；服务商的计费倍率以账单为准。", muted=True)
+        if not hasattr(self, "usage_total"):
+            self.usage_total = tk.StringVar(self.root)
+            self.usage_period = tk.StringVar(self.root, "7")
+            self.usage_unit = tk.StringVar(self.root, "天")
+            self.usage_people = tk.StringVar(self.root, "1")
+            self.usage_result = tk.StringVar(self.root, "填好后点击换算。不会额外加算余量。")
+        self.field("这段时间已用的总流量（GB）", self.usage_total)
+        self.field("统计时长", self.usage_period)
+        ttk.Combobox(self.body, textvariable=self.usage_unit, state="readonly", values=("天", "个月")).pack(fill="x", pady=(0, 14))
+        self.field("这份总流量由几个人使用（自己用填 1）", self.usage_people)
+        self.button("换算每月用量", self.estimate_observed_traffic, primary=True)
+        ttk.Label(self.body, textvariable=self.usage_result, wraplength=680).pack(fill="x", pady=(0, 14))
+        self.paragraph("短期记录只适合初步参考，包含平常使用习惯的完整月份更可靠。多人结果是平均值，不表示每个人用量一样；长时间直播或大文件下载需另算。", muted=True)
+        self.button("返回获取订阅", lambda: self.navigate("referrals"))
+
+    def estimate_observed_traffic(self):
+        try:
+            unit = {"天": "days", "个月": "months"}[self.usage_unit.get()]
+            value = guidance.observed_monthly_traffic(
+                self.usage_total.get(), self.usage_period.get(), self.usage_people.get(), unit=unit)
+            basis = "按 30 天折算" if unit == "days" else "按统计月份平均"
+            result = f"全组约 {value.group_gb:,.1f} GB/月 · 人均约 {value.per_person_gb:,.1f} GB/月（{basis}）。"
+            if value.group_gb == 0:
+                result += "\n这段时间没有记录到流量，不能据此判断下个月不需要流量。"
+            else:
+                result += "\n按这个记录选接近的套餐档位，再留少量余量；用量变化后再调整。"
+            self.usage_result.set(result)
+        except (KeyError, SetupError):
+            self.usage_result.set("请填写有效记录：总流量可为 0，时长至少 1 天或 1 个月，人数为 1–10000 的整数。")
+
+    def show_bitrate_estimate(self):
+        self.heading("持续传输用量（高级）", "适用于已知码率的持续直播、视频或下载，不用于按日常在线时长推荐套餐。")
+        if not hasattr(self, "bitrate"):
+            self.bitrate = tk.StringVar(self.root)
+            self.hours = tk.StringVar(self.root)
+            self.estimate = tk.StringVar(self.root, "仅计算实际持续经过代理的传输时段；待机、暂停和国内直连不计入。")
+        self.field("传输期间的平均合计码率（Mbps，上传 + 下载）", self.bitrate)
+        self.field("每天实际持续传输时长（小时）", self.hours)
+        self.button("计算持续传输用量", self.estimate_traffic, primary=True)
+        ttk.Label(self.body, textvariable=self.estimate, wraplength=680).pack(fill="x", pady=(0, 14))
+        self.paragraph("计算式：Mbps × 每天传输小时 × 30 天 × 0.45 = GB/月。未加余量；服务商的计费倍率、协议开销和实际码率变化可能影响账单。", muted=True)
+        self.button("返回获取订阅", lambda: self.navigate("referrals"))
+
     def estimate_traffic(self):
         try:
-            value = guidance.monthly_traffic(float(self.bitrate.get()), float(self.hours.get()))
-            self.estimate.set(f"估算约 {value:,.1f} GB/月（30 天，含 20% 余量）。请核对服务商计费倍率和实测流量。")
+            value = guidance.monthly_traffic(float(self.bitrate.get()), float(self.hours.get()), reserve=1)
+            self.estimate.set(f"仅上述持续传输约 {value:,.1f} GB/月（30 天，未加余量），不代表日常月用量。")
         except (ValueError, SetupError):
             self.estimate.set("请输入有效的正数：每天最多 24 小时，码率单位 Mbps。")
 
@@ -451,7 +488,7 @@ class Wizard:
                 self.button("在浏览器打开这个推广入口", lambda url=item.url: webbrowser.open(url))
         self.paragraph("若全部不可达，请稍后重试或自行选择其他服务商。助手不会绕过证书错误，也不会推荐不安全的 HTTP 入口。", muted=True)
         self.button("已取得订阅：返回导入", lambda: self.navigate("local"), primary=True)
-        self.button("重新估算或检测", lambda: self.navigate("referrals"))
+        self.button("返回获取订阅", lambda: self.navigate("referrals"))
 
     def show_vps(self):
         self.heading("部署你的个人 VPS", "适用于全新 Debian 12/13、Ubuntu 22.04/24.04。使用 root 登录；密码交给系统 OpenSSH 输入，不保存到助手。")
@@ -537,7 +574,7 @@ def main(argv=None) -> int:
     root = tk.Tk()
     wizard = Wizard(root, self_test=args.self_test)
     if args.self_test:
-        for page in ("home", "environment", "local", "referrals", "links", "vps", "preview", "complete", "help"):
+        for page in ("home", "environment", "local", "referrals", "usage_estimate", "bitrate_estimate", "links", "vps", "preview", "complete", "help"):
             wizard.navigate(page)
             root.update()
         wizard.expert.set(True)

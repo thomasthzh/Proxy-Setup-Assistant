@@ -16,6 +16,8 @@ import sys
 import tempfile
 import zipfile
 
+from build_launcher import build_launcher
+
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = runpy.run_path(str(ROOT / "vps_proxy_setup" / "__init__.py"))["__version__"]
@@ -111,7 +113,9 @@ def main() -> int:
     if not args.skip_build:
         build(output)
     verify(output)
-    print("Verified release archive: " + str(package(output)))
+    archive = package(output)
+    print("Verified release archive: " + str(archive))
+    print("Single-file launcher: " + str(build_launcher(VERSION, archive, ROOT / "dist" / "Proxy-Setup-Assistant.bat")))
     return 0
 
 

@@ -32,5 +32,7 @@ jobs:
           path: |
             dist/Proxy-Setup-Assistant-*-windows-x64.zip
             dist/Proxy-Setup-Assistant-*-windows-x64.zip.sha256
+            dist/Proxy-Setup-Assistant.bat
+            dist/Proxy-Setup-Assistant.bat.sha256
           if-no-files-found: error
           retention-days: 30

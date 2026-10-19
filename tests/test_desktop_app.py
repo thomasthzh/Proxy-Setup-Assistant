@@ -104,5 +104,50 @@ class WorkerRecoveryTests(unittest.TestCase):
         thread.assert_not_called()
 
 
+class UsageEstimateTests(unittest.TestCase):
+    def wizard(self, *, total="1200", period="12", people="15", unit="个月"):
+        wizard = app.Wizard.__new__(app.Wizard)
+        wizard.usage_total = Mock(get=Mock(return_value=total))
+        wizard.usage_period = Mock(get=Mock(return_value=period))
+        wizard.usage_people = Mock(get=Mock(return_value=people))
+        wizard.usage_unit = Mock(get=Mock(return_value=unit))
+        wizard.usage_result = Mock()
+        return wizard
+
+    def test_observed_result_is_average_without_added_reserve(self):
+        wizard = self.wizard()
+        wizard.estimate_observed_traffic()
+        text = wizard.usage_result.set.call_args.args[0]
+        self.assertIn("全组约 100.0 GB/月", text)
+        self.assertIn("人均约 6.7 GB/月", text)
+        self.assertIn("按统计月份平均", text)
+
+    def test_zero_usage_does_not_promise_zero_future_consumption(self):
+        wizard = self.wizard(total="0", period="7", unit="天")
+        wizard.estimate_observed_traffic()
+        text = wizard.usage_result.set.call_args.args[0]
+        self.assertIn("全组约 0.0 GB/月", text)
+        self.assertIn("不能据此判断下个月不需要流量", text)
+        self.assertNotIn("选接近的套餐", text)
+
+    def test_invalid_fields_report_error_instead_of_stale_estimate(self):
+        for fields in ({"total": ""}, {"people": "1.5"}, {"period": "nan"}, {"unit": "未知"}):
+            with self.subTest(fields=fields):
+                wizard = self.wizard(**fields)
+                wizard.estimate_observed_traffic()
+                self.assertIn("请填写有效记录", wizard.usage_result.set.call_args.args[0])
+
+    def test_advanced_calculation_is_explicit_and_has_no_added_reserve(self):
+        wizard = app.Wizard.__new__(app.Wizard)
+        wizard.bitrate = Mock(get=Mock(return_value="3"))
+        wizard.hours = Mock(get=Mock(return_value="4"))
+        wizard.estimate = Mock()
+        wizard.estimate_traffic()
+        text = wizard.estimate.set.call_args.args[0]
+        self.assertIn("162.0 GB/月", text)
+        self.assertIn("未加余量", text)
+        self.assertIn("不代表日常月用量", text)
+
+
 if __name__ == "__main__":
     unittest.main()

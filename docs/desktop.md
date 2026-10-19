@@ -1,19 +1,26 @@
 # Proxy Setup Assistant · Windows 桌面向导
 
-v0.2.0 将本地客户端准备和配置导入放进中文桌面窗口，保留 VPS 安装 CLI。当前发布目标为 Windows x64；客户端安装器可根据系统架构检查兼容版本，但这不表示桌面 EXE 已提供原生 ARM64 包。
+v0.2.1 提供单文件 BAT 启动入口，把本地客户端准备和配置导入放进中文窗口，保留 VPS 安装 CLI。当前发布目标为 Windows x64；客户端安装器可根据系统架构检查兼容版本，但这不表示桌面 EXE 已提供原生 ARM64 包。
 
 ## 下载和启动
 
-从项目官方 GitHub Releases 下载 `Proxy-Setup-Assistant-0.2.0-windows-x64.zip` 与对应 `.zip.sha256`。在 PowerShell 运行：
+**[下载一个 BAT 文件](https://github.com/thomasthzh/Proxy-Setup-Assistant/releases/download/v0.2.1/Proxy-Setup-Assistant.bat)，保存后双击。** 不需要先安装 Python，也不需要自己处理 ZIP。首次运行会自动下载约 24 MB 的程序包，校验后准备到本机缓存，打开中文向导；后续直接使用已核验的缓存。
+
+BAT 使用 Windows 自带的 PowerShell，只为当前进程设置执行参数，不修改系统执行策略，不要求管理员权限。程序包来源和 SHA-256 固定在 BAT 中，缓存中的 EXE 每次启动前也会核对。它不会静默升级到其他版本；更新时重新下载新版 BAT。
+
+首次下载失败时，窗口会保留原因和官方发布页；不要从陌生镜像下载替代文件或关闭系统防护。BAT 是小型启动器，仍然需要运行程序，不能离线首次使用。
+
+如需离线搬运，可从项目官方 GitHub Releases 下载 `Proxy-Setup-Assistant-0.2.1-windows-x64.zip` 与对应 `.zip.sha256`。在 PowerShell 运行：
 
 ```powershell
-Get-FileHash .\Proxy-Setup-Assistant-0.2.0-windows-x64.zip -Algorithm SHA256
+Get-FileHash .\Proxy-Setup-Assistant-0.2.1-windows-x64.zip -Algorithm SHA256
 ```
 
-将结果与发布的校验文件核对，再完整解压并双击 `Proxy-Setup-Assistant.exe`。两份 EXE 应放在同一目录。不要从 ZIP 内直接运行。普通桌面操作无需管理员权限，客户端自己的安装器或 TUN 组件可能另行请求提升权限。
+只有手动 ZIP 方式需要核对后完整解压，再双击 `Proxy-Setup-Assistant.exe`，并保留同目录的两个 EXE。普通桌面操作无需管理员权限，客户端自己的安装器或 TUN 组件可能另行请求提升权限。
 
 | 文件 | 用途 |
 | --- | --- |
+| `Proxy-Setup-Assistant.bat` | 单独下载并双击的入口；自动准备程序，无需手动解压 |
 | `Proxy-Setup-Assistant.exe` | 无黑色终端窗口的桌面向导 |
 | `Proxy-Setup-Console.exe` | VPS 安装与 OpenSSH 密码、主机指纹交互；也可独立运行 |
 | `SHA256SUMS.txt` | 两个 EXE 的 SHA-256；整个 ZIP 的校验另在 `.zip.sha256` |
@@ -63,13 +70,17 @@ VPS 路径仍要求系统安装 OpenSSH 客户端，并使用全新 Debian 12/13
 
 向导提供的服务商注册链接包含仓库所有者指定的推广邀请码，推荐人可能获得奖励或佣金。点击前可查看目标；打开网页不等于注册或付款授权。工具只检查当前网络能否安全访问，不验证服务商资质、套餐价格、长期可用性或退款承诺。
 
-1 元 / 10 GB 等低价小流量套餐不能保证视频直播需求。按十进制估算：
+默认建议先看服务商账单或客户端实际经过代理的流量。国内直连、网页待机等不会持续消耗代理流量，不能用“每天在线多少小时”直接推算套餐大小。
+
+没有历史数据时，先选能追加的小套餐，使用 7 天后查看实际用量，再决定是否增加。已有数据时，选择实测换算，输入统计时段、累计 GB 和使用人数，显示全组及人均月均值；人均只表示平均，不能保证每个人的需要相同，也不会自动乘上额外余量。注意服务商的倍率、计费口径和月底重置规则。
+
+持续开播、视频观看或大文件传输可进入高级计算。以下公式只适合实际持续传输的时段，不能套用到普通在线时长：
 
 ```text
 月流量 GB = 平均总码率 Mbps × 每天小时 × 每月天数 × 0.45
 ```
 
-4 Mbps × 2 小时 × 30 天约 108 GB，按 20% 余量约 129.6 GB；码率应计算通过代理的上传与下载总量，服务商的计费倍率和双向计费可能进一步增加用量。延迟低、下载源快或某次网页可达都不能保证最快线路或直播不中断。
+码率填写经过代理的平均上传与下载合计，时长填写实际持续传输时长。高级计算是明确假设下的结果，并非日常使用的默认推荐。延迟低、下载源快或某次网页可达都不能保证最快线路或直播不中断。
 
 ## 源码运行
 
@@ -106,8 +117,10 @@ python tools/build_desktop.py
 构建器用 PyInstaller 为 GUI 和控制台各生成一个单文件 EXE，将服务器 Python 源码和 `assets.json` 原样作为资源打包；VPS 上传过程需要读取这些文件。随后运行两个 EXE 的 `--self-test` 和控制台计划检查，使用临时用户目录隔离状态。验证通过后生成：
 
 ```text
-dist/Proxy-Setup-Assistant-0.2.0-windows-x64.zip
-dist/Proxy-Setup-Assistant-0.2.0-windows-x64.zip.sha256
+dist/Proxy-Setup-Assistant.bat
+dist/Proxy-Setup-Assistant.bat.sha256
+dist/Proxy-Setup-Assistant-0.2.1-windows-x64.zip
+dist/Proxy-Setup-Assistant-0.2.1-windows-x64.zip.sha256
 ```
 
-`.github/workflows/desktop.yml` 支持手动触发或版本标签触发，上传 ZIP 与校验文件为构建产物；工作流本身不发布 GitHub Release。实际发布前还应检查解压后的双击启动、客户端确认流程与网络环境。构建和自检通过不等于新 VPS 部署、第三方注册付款或真实直播通过验证。
+BAT 在 ZIP 封包后生成，嵌入该 ZIP 和两个 EXE 的摘要，作为独立资源发布，不放进 ZIP 形成循环摘要。`.github/workflows/desktop.yml` 支持手动触发或版本标签触发，上传 BAT、ZIP 与校验文件；工作流本身不发布 GitHub Release。实际发布前还应检查单文件首次下载、缓存再次启动和客户端确认流程。构建和自检通过不等于新 VPS 部署、第三方注册付款或真实直播通过验证。
